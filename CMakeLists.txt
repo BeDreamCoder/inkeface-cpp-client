@@ -41,6 +41,9 @@ HunterGate(
 project(cpp-ethereum)
 set(PROJECT_VERSION 1.4.0.dev0)
 
+# if (NOT EXISTS ${CMAKE_SOURCE_DIR}/evmjit/.git)
+#     message(FATAL_ERROR "Git submodules not initialized, execute:\n  git submodule update --init")
+# endif()
 
 cable_set_build_type(DEFAULT RelWithDebInfo CONFIGURATION_TYPES Debug;Release;RelWithDebInfo)
 
@@ -54,6 +57,7 @@ include(EthCompilerSettings)
 include(EthExecutableHelper)
 include(EthDependencies)
 include(EthUtils)
+include(FindProtobuf)
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
@@ -69,7 +73,7 @@ find_package(libscrypt CONFIG REQUIRED)
 hunter_add_package(ethash)
 find_package(ethash CONFIG REQUIRED)
 
-include(FindProtobuf)
+hunter_add_package(Protobuf)
 find_package(Protobuf CONFIG REQUIRED)
 
 include(ProjectSecp256k1)
