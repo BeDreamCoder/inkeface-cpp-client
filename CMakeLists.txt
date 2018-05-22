@@ -41,9 +41,6 @@ HunterGate(
 project(cpp-ethereum)
 set(PROJECT_VERSION 1.4.0.dev0)
 
-if (NOT EXISTS ${CMAKE_SOURCE_DIR}/evmjit/.git)
-    message(FATAL_ERROR "Git submodules not initialized, execute:\n  git submodule update --init")
-endif()
 
 cable_set_build_type(DEFAULT RelWithDebInfo CONFIGURATION_TYPES Debug;Release;RelWithDebInfo)
 
