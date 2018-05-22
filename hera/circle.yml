@@ -1,0 +1,227 @@
+defaults:
+
+  update-submodules: &update-submodules
+    run:
+      name: "Update git submodules"
+      command: |
+        git submodule update --init
+
+  environment-info: &environment-info
+    run:
+      name: "Environment info"
+      command: |
+        echo CXX: $CXX
+        echo Generator: $GENERATOR
+        echo CMake options: $CMAKE_OPTIONS
+        $CXX --version
+        $CXX --version > compiler.version
+
+  configure: &configure
+    run:
+      name: "Configure"
+      # Build "out-of-source" to have better coverage report
+      # (ninja is using relative paths otherwise).
+      working_directory: ~/build
+      command: |
+        cmake ../project -G "$GENERATOR" -DCMAKE_BUILD_TYPE=$BUILD_TYPE $CMAKE_OPTIONS
+
+  build: &build
+    run:
+      name: "Build"
+      working_directory: ~/build
+      command: cmake --build . -- -j $BUILD_PARALLEL_JOBS
+
+  save-deps-cache: &save-deps-cache
+    cache-save:
+      name: "Save dependencies cache"
+      key: &deps-cache-key deps-4-{{arch}}-{{checksum "compiler.version"}}-{{checksum "cmake/ProjectBinaryen.cmake"}}
+      paths:
+        - ~/build/deps
+
+  restore-deps-cache: &restore-deps-cache
+    cache-restore:
+      name: "Restore dependencies cache"
+      key: *deps-cache-key
+
+  save-eth-cache: &save-eth-cache
+    save_cache:
+      key: &eth-cache-key cpp-prebuilt-cache-{{arch}}-{{checksum "compiler.version"}}-a17f30a41aa2af506b6b453f052c53bd323a36e0
+      paths:
+        - ~/build
+        - ~/.hunter
+
+  restore-eth-cache: &restore-eth-cache
+    restore_cache:
+      key: *eth-cache-key
+
+  checkout-cpp-eth: &checkout-cpp-eth
+    run:
+      name: "Checkout cpp-ethereum repo"
+      working_directory: ~/project
+      command: |
+        cd ..
+        git clone https://github.com/ethereum/cpp-ethereum --branch develop --single-branch
+        cd cpp-ethereum
+        git reset --hard a17f30a41aa2af506b6b453f052c53bd323a36e0
+        git submodule update --init
+
+  link-hera: &link-hera
+    run:
+      name: "Link hera to prebuilt cpp-eth"
+      working_directory: ~/project
+      # TODO: run cmake in hera dir with config flags -DHERA_DEBUGGING=ON -DHERA_EVM2WASM_JS=ON
+      command: |
+        cd ..
+        echo "pwd: $(pwd)"
+        echo "listing files: $(ls -al)"
+        rm -rf ~/cpp-ethereum/hera
+        ln -s ~/project ~/cpp-ethereum/hera
+
+  build-cpp-eth: &build-cpp-eth
+    run:
+      name: "Build cpp-ethereum with linked Hera"
+      working_directory: ~/project
+      # export PATH is an alternative to `make install`
+      command: |
+        cd ..
+        mkdir -p build && cd build
+        cmake ../cpp-ethereum -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHERA=ON
+        make -j8
+        echo "build finished."
+        echo 'export PATH=~/build/test:$PATH' >> $BASH_ENV
+        cd ../cpp-ethereum
+        echo "cpp-ethereum branch: $(git rev-parse --abbrev-ref HEAD)  commit: $(git rev-parse HEAD)"
+        cd hera
+        echo "hera branch: $(git rev-parse --abbrev-ref HEAD)  commit: $(git rev-parse HEAD)"
+
+  test-ewasm: &test-ewasm
+    run:
+      name: "Run ewasm state tests"
+      working_directory: ~/project
+      command: |
+        echo "print working directory:"
+        pwd
+        echo "list files in working directory:"
+        ls -al .
+        echo "check testeth command"
+        testeth --help
+        echo "run tests script."
+        ./scripts/tests.sh
+
+  linux-steps: &linux-steps
+    - checkout
+    - *update-submodules
+    - *environment-info
+    - *restore-deps-cache
+    - *configure
+    - *build
+    - *save-deps-cache
+
+
+version: 2
+jobs:
+
+  # to run this using local circleci tool, rename Ewasm-Tests to `build` then do `circleci build -c circle.yml`
+  ewasm-tests:
+    environment:
+      - BUILD_TYPE: Release
+      - CXX: clang++
+      - CC:  clang
+      - GENERATOR: Ninja
+      - BUILD_PARALLEL_JOBS: 4
+      - CMAKE_OPTIONS: -DHERA_DEBUGGING=OFF
+    docker:
+      - image: ethereum/cpp-build-env
+    steps:
+      - checkout
+      - *update-submodules
+      - *environment-info
+      - *checkout-cpp-eth
+      - *restore-eth-cache
+      - *link-hera
+      - *build-cpp-eth
+      - *save-eth-cache
+      - *test-ewasm
+
+  linux-clang:
+    environment:
+      - BUILD_TYPE: Release
+      - CXX: clang++
+      - CC:  clang
+      - GENERATOR: Ninja
+      - BUILD_PARALLEL_JOBS: 4
+      - CMAKE_OPTIONS: -DHERA_DEBUGGING=OFF
+    docker:
+      - image: ethereum/cpp-build-env
+    steps: *linux-steps
+
+  linux-clang-evm2wasm:
+    environment:
+      - BUILD_TYPE: Release
+      - CXX: clang++
+      - CC:  clang
+      - GENERATOR: Ninja
+      - BUILD_PARALLEL_JOBS: 4
+      - CMAKE_OPTIONS: -DHERA_DEBUGGING=on -DHERA_EVM2WASM=on -DHERA_METERING_CONTRACT=on
+    docker:
+      - image: ethereum/cpp-build-env
+    steps: *linux-steps
+
+  linux-clang-metering:
+    environment:
+      - BUILD_TYPE: Release
+      - CXX: clang++
+      - CC:  clang
+      - GENERATOR: Ninja
+      - BUILD_PARALLEL_JOBS: 4
+      - CMAKE_OPTIONS: -DHERA_DEBUGGING=off -DHERA_METERING_CONTRACT=on
+    docker:
+      - image: ethereum/cpp-build-env
+    steps: *linux-steps
+
+  linux-clang-metering:
+    environment:
+      - BUILD_TYPE: Release
+      - CXX: clang++
+      - CC:  clang
+      - GENERATOR: Ninja
+      - BUILD_PARALLEL_JOBS: 4
+      - CMAKE_OPTIONS: -DHERA_DEBUGGING=on -DHERA_EVM2WASM=on
+    docker:
+      - image: ethereum/cpp-build-env
+    steps: *linux-steps
+
+  linux-gcc-debug:
+    environment:
+      - BUILD_TYPE: Debug
+      - CXX: g++
+      - CC:  gcc
+      - GENERATOR: Unix Makefiles
+      - BUILD_PARALLEL_JOBS: 4
+      - CMAKE_OPTIONS: -DHERA_DEBUGGING=ON
+    docker:
+      - image: ethereum/cpp-build-env
+    steps: *linux-steps
+
+  linux-gcc-all-options:
+    environment:
+      - BUILD_TYPE: Debug
+      - CXX: g++
+      - CC:  gcc
+      - GENERATOR: Unix Makefiles
+      - BUILD_PARALLEL_JOBS: 4
+      - CMAKE_OPTIONS: -DHERA_DEBUGGING=ON -DHERA_EVM2WASM=on -DHERA_METERING_CONTRACT=on
+    docker:
+      - image: ethereum/cpp-build-env
+    steps: *linux-steps
+
+workflows:
+  version: 2
+  cpp-ethereum:
+    jobs:
+      - linux-clang
+      - linux-gcc-debug
+      - linux-clang-evm2wasm
+      - linux-clang-metering
+      - linux-gcc-all-options
+      - ewasm-tests
