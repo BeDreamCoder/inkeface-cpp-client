@@ -24,8 +24,8 @@ string SignTx::GetSign(SignParams const& params) const
 	auto sec = Secret{fromHex(params.prikey)};
  	auto sender = 'i' + toAddress(sec).hex();
 
-	SignContent *signContent = new SignContent();
-	ChaincodeSpec *ccSpec = signContent->mutable_chaincode_spec();
+	SignContent signContent;
+	ChaincodeSpec *ccSpec = signContent.mutable_chaincode_spec();
 	ccSpec->set_type(ChaincodeSpec_Type_GOLANG);
 
 	ChaincodeID * pCcId = ccSpec->mutable_chaincode_id();
@@ -37,17 +37,17 @@ string SignTx::GetSign(SignParams const& params) const
 		pInput->add_args(*it);
 	}
 
-	ChaincodeInvocationSpec *cis = new ChaincodeInvocationSpec();
-	signContent->set_id_generation_alg(cis->id_generation_alg());
+	ChaincodeInvocationSpec cis;
+	signContent.set_id_generation_alg(cis.id_generation_alg());
 
-	SenderSpec *pSenderSpec = signContent->mutable_sender_spec();
+	SenderSpec *pSenderSpec = signContent.mutable_sender_spec();
 	pSenderSpec->set_sender(sender);
 	pSenderSpec->set_counter(params.counter);
 	pSenderSpec->set_ink_limit(params.inkLimit);
 	pSenderSpec->set_msg(params.msg);
 
 	string sData;
-	signContent->SerializeToString(&sData);
+	signContent.SerializeToString(&sData);
 	auto msg = sha256(bytesConstRef(sData));
 	auto sig = sign(sec, msg);
 	return sig.hex();
