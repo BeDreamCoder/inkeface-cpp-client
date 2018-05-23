@@ -57,7 +57,7 @@ include(EthCompilerSettings)
 include(EthExecutableHelper)
 include(EthDependencies)
 include(EthUtils)
-include(FindProtobuf)
+# include(FindProtobuf)
 
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED ON)
@@ -74,7 +74,7 @@ hunter_add_package(ethash)
 find_package(ethash CONFIG REQUIRED)
 
 hunter_add_package(Protobuf)
-find_package(Protobuf CONFIG REQUIRED)
+find_package(Protobuf REQUIRED)
 
 include(ProjectSecp256k1)
 include(ProjectLibFF)
